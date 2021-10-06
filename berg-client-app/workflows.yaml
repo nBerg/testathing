@@ -1,0 +1,131 @@
+---
+# Source: ethos-argo-client-templates/templates/rbac.yaml
+# This file contains RBAC related manifest involving service account, role binding that is used
+# for giving necessary permission to trigger Argo workflow.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: moonbeam-test--berg-ethos-caas-next-sa
+  namespace: client-hub-namespace-berg
+---
+# Source: ethos-argo-client-templates/templates/eventbus.yaml
+# This file contains event bus custom resource used for events transmission from EventSources to Sensors
+# Refer for more details: https://argoproj.github.io/argo-events/eventbus/
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: client-hub-namespace-berg
+spec:
+  nats:
+    native:
+      # Optional, defaults to 3. If it is < 3, set it to 3, that is the minimal requirement.
+      replicas: 3
+      # Optional, authen strategy, "none" or "token", defaults to "none"
+      auth: token
+---
+# Source: ethos-argo-client-templates/templates/eventsource.yaml
+# This file contains event source custom resource required to consume events from external sources like webhook etc
+# Refer for more details: https://argoproj.github.io/argo-events/concepts/event_source/
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: argo-app-webhook
+  namespace: client-hub-namespace-berg
+spec:
+  service:
+    ports:
+      - port: 12000
+        targetPort: 12000
+  webhook:
+    moonbeam-test--berg-ethos-caas-next-app-change:
+      port: "12000"
+      endpoint: /moonbeam-test-berg-ethos-caas-next-deploy
+      method: POST
+---
+# Source: ethos-argo-client-templates/templates/ingressroute.yaml
+# This file contains ingress route used for exposing event source custom resource
+apiVersion: contour.heptio.com/v1beta1
+kind: IngressRoute
+metadata:
+  name: ingressroute-webhook-event-source
+  namespace: client-hub-namespace-berg
+  annotations:
+    kubernetes.io/ingress.class: contour-corp
+spec:
+  routes:
+    - match: /
+      services:
+        - name: argo-app-webhook-eventsource-svc
+          port: 12000
+      timeout: 60s
+  virtualhost:
+    fqdn: moonbeam-test-berg-ethos-caas-next-webhook.sandbox.cloud.adobe.io
+    tls:
+      secretName: heptio-contour/cluster-ssl-alternate
+---
+# Source: ethos-argo-client-templates/templates/sensor-primary-workflow-docker-build.yaml
+# Sensor defines a set of event dependencies (inputs) and triggers (outputs).
+# Refer for more details: https://argoproj.github.io/argo-events/concepts/sensor/
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: moonbeam-test--berg-ethos-caas-next-deploy-docker-build
+  namespace: client-hub-namespace-berg
+spec:
+  template:
+    serviceAccountName: moonbeam-test--berg-ethos-caas-next-sa
+  dependencies:
+    - name: payload
+      eventSourceName: argo-app-webhook
+      eventName: moonbeam-test--berg-ethos-caas-next-app-change
+  triggers:
+    - template:
+        name: trigger
+        argoWorkflow:
+          group: argoproj.io
+          version: v1alpha1
+          resource: workflows
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: moonbeam-test--berg-ethos-caas-next-client-dockerapp-
+                labels:
+                  appName: dockerapp
+              spec:
+                serviceAccountName: moonbeam-test--berg-ethos-caas-next-sa
+                arguments:
+                  parameters:
+                    - name: container-registry
+                      value: "docker-berg-test-repo-release.dr-uw2.adobeitc.com"
+                    - name: container-registry-type
+                      value: "docker"
+                    - name: environment
+                      value: "dev"
+                    - name: git-commit-id
+                      value: ""
+                    - name: git-org
+                      value: "moonbeam-test"
+                    - name: git-repo
+                      value: "berg-ethos-caas-next"
+                    - name: git-repo-url
+                      value: ""
+                    - name: region
+                      value: "va6"
+                    - name: registry-image-path
+                      value: "moonbeam-test/berg-ethos-caas-next/berg-ethos-caas-next-img"
+                workflowTemplateRef:
+                  name: primary-workflow-docker-build
+                  clusterScope: true
+          parameters:
+            - src:
+                dependencyName: payload
+                dataKey: body.head_commit.id
+              dest: spec.arguments.parameters.3.value
+            - src:
+                dependencyName: payload
+                dataKey: body.repository.clone_url
+              dest: spec.arguments.parameters.6.value

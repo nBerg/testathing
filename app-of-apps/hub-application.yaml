@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hub-application-berg
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # this would be the client repo prob
+    repoURL: https://github.com/nBerg/testathing.git
+    path: berg-client-app
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: client-hub-namespace-berg
+  syncPolicy:
+    automated:
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
