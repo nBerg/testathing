@@ -9,8 +9,8 @@ spec:
     path: guestbook
     targetRevision: HEAD
   destination:
-    namespace: guestbook
     server: https://kubernetes.default.svc
+    namespace: guestbook
   syncPolicy:
     automated:
       prune: true
