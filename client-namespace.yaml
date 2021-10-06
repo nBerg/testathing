@@ -1,0 +1,10 @@
+{
+  "apiVersion": "v1",
+  "kind": "Namespace",
+  "metadata": {
+    "name": "ns-can-moonbeam-test--berg-ethos-caas-next-deploy",
+    "labels": {
+      "name": "ns-can-moonbeam-test--berg-ethos-caas-next-deploy"
+    }
+  }
+}
